@@ -1,5 +1,3 @@
-# Script for listing EC2 instances and creating JIRA tickets
-
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,26 +15,25 @@ def list_ec2_instances(region):
         return json.loads(ec2_details)
     except json.JSONDecodeError:
         return []
-    
-#Remove this    
-    
+
 def get_instance_info(instance):
     instance_id = instance['InstanceId']
     instance_type = instance['InstanceType']
     instance_state = instance['State']['Name']
     public_ip = instance.get('PublicIpAddress', 'N/A')
     private_ip = instance.get('PrivateIpAddress', 'N/A')
+    kernel_id = instance.get('KernelId', 'N/A')
     volumes = [volume['Ebs']['VolumeId'] for volume in instance['BlockDeviceMappings']]
     volumes_info = ", ".join(volumes)
-    return (f"Instance ID: {instance_id}\n"
-            f"Type: {instance_type}\n"
-            f"State: {instance_state}\n"
-            f"Public IP: {public_ip}\n"
-            f"Private IP: {private_ip}\n"
-            f"Volumes: {volumes_info}\n")
-
-
-# Remove this
+    return {
+        'Instance ID': instance_id,
+        'Instance Type': instance_type,
+        'Instance State': instance_state,
+        'Public IP': public_ip,
+        'Private IP': private_ip,
+        'Kernel ID': kernel_id,
+        'Volumes': volumes_info
+    }
 
 def main():
     jira, project_key = connect_to_jira()
@@ -55,13 +52,14 @@ def main():
                 print(f"No EC2 instances found in {region}. Skipping sub-task creation.")
                 continue
 
-            instance_ids = [instance['InstanceId'] for reservation in instances['Reservations'] for instance in reservation['Instances']]
-            if not instance_ids:
+            instance_infos = [get_instance_info(instance) for reservation in instances['Reservations'] for instance in reservation['Instances']]
+            
+            if not instance_infos:
                 print(f"No EC2 instances found in {region}. Skipping sub-task creation.")
                 continue
 
             subtask_summary = f"EC2 Instances in {region}"
-            subtask_description = f"Instances: {', '.join(instance_ids)}"
+            subtask_description = "\n\n".join([f"{key}: {value}" for instance_info in instance_infos for key, value in instance_info.items()])
 
             create_subtask(jira, project_key, main_issue_key, subtask_summary, subtask_description)
             print(f"Sub-task created for region {region}")
@@ -72,5 +70,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
